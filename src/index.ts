@@ -54,7 +54,8 @@ await app.register(fastifySwagger, {
   openapi: {
     info: {
       title: "Cuidar Juntos API",
-      description: "API de gestão de cuidados familiares (pacientes, insumos, medicamentos).",
+      description:
+        "API de gestão de cuidados familiares (pacientes, insumos, medicamentos).",
       version: "1.0.0",
     },
     servers: [
@@ -165,7 +166,7 @@ app.route({
     } catch (error) {
       app.log.error(error);
       reply.status(500).send({
-        error: "Internal authentication error",
+        error: "Internal authentication error.",
         code: "AUTH_FAILURE",
       });
     }
