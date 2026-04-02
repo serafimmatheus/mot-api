@@ -122,12 +122,12 @@ model PatientCaregiver {
   @@map("patient_caregiver")
 }
 
-/// Convite por e-mail antes da pessoa criar conta; ao cadastrar com o mesmo e-mail, o vínculo é criado automaticamente.
 model PatientCaregiverInvite {
   id        String   @id @default(cuid())
   patientId String
-  /// E-mail normalizado em minúsculas.
   email     String
+  token     String   @unique
+  expiresAt DateTime @db.Timestamptz()
   createdAt DateTime @default(now()) @db.Timestamptz()
 
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)

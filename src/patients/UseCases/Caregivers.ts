@@ -3,6 +3,11 @@ import { ErrorConflict } from "../../errors/ErrorConflict.js";
 import { ErrorNotFound } from "../../errors/ErrorNotFound.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { assertPatientCaregiverAccess } from "../../lib/assertPatientCaregiverAccess.js";
+import {
+  buildCaregiverInviteUrl,
+  caregiverInviteExpiresAt,
+  generateCaregiverInviteToken,
+} from "../../lib/caregiver-invite-token.js";
 
 export class ListPatientCaregivers {
   constructor(private readonly prisma: PrismaClient) {}
@@ -62,16 +67,19 @@ export class AddPatientCaregiver {
       };
     }
 
+    const token = generateCaregiverInviteToken();
+    const expiresAt = caregiverInviteExpiresAt();
     await this.prisma.patientCaregiverInvite.upsert({
       where: {
         patientId_email: { patientId, email: normalized },
       },
-      create: { patientId, email: normalized },
-      update: {},
+      create: { patientId, email: normalized, token, expiresAt },
+      update: { token, expiresAt },
     });
     return {
       status: "pending_invite" as const,
       email: normalized,
+      inviteUrl: buildCaregiverInviteUrl(token),
     };
   }
 }
@@ -109,5 +117,54 @@ export class RemovePatientCaregiver {
         patientId_userId: { patientId, userId: caregiverUserId },
       },
     });
+  }
+}
+
+export class ListPatientCaregiverInvites {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async execute(userId: string, patientId: string) {
+    await assertPatientCaregiverAccess(this.prisma, { userId, patientId });
+    const rows = await this.prisma.patientCaregiverInvite.findMany({
+      where: { patientId },
+      orderBy: { createdAt: "desc" },
+    });
+    const now = new Date();
+    return {
+      invites: rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        expiresAt: r.expiresAt.toISOString(),
+        createdAt: r.createdAt.toISOString(),
+        inviteUrl: buildCaregiverInviteUrl(r.token),
+        status: r.expiresAt < now ? ("expired" as const) : ("pending" as const),
+      })),
+    };
+  }
+}
+
+export class RefreshPatientCaregiverInvite {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async execute(userId: string, patientId: string, inviteId: string) {
+    await assertPatientCaregiverAccess(this.prisma, { userId, patientId });
+    const row = await this.prisma.patientCaregiverInvite.findFirst({
+      where: { id: inviteId, patientId },
+    });
+    if (!row) {
+      throw new ErrorNotFound("Convite não encontrado");
+    }
+    const token = generateCaregiverInviteToken();
+    const expiresAt = caregiverInviteExpiresAt();
+    const updated = await this.prisma.patientCaregiverInvite.update({
+      where: { id: inviteId },
+      data: { token, expiresAt },
+    });
+    return {
+      id: updated.id,
+      email: updated.email,
+      expiresAt: updated.expiresAt.toISOString(),
+      inviteUrl: buildCaregiverInviteUrl(updated.token),
+    };
   }
 }

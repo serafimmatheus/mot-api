@@ -74,8 +74,34 @@ export const AddCaregiverResponseSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("pending_invite"),
     email: z.string(),
+    inviteUrl: z.string().url(),
   }),
 ]);
+
+export const PatientInviteIdParamsSchema = z.object({
+  patientId: z.string().cuid(),
+  inviteId: z.string().cuid(),
+});
+
+export const CaregiverInviteDtoSchema = z.object({
+  id: z.string().cuid(),
+  email: z.string().email(),
+  expiresAt: z.string().datetime(),
+  createdAt: z.string().datetime(),
+  inviteUrl: z.string().url(),
+  status: z.enum(["pending", "expired"]),
+});
+
+export const ListCaregiverInvitesResponseSchema = z.object({
+  invites: z.array(CaregiverInviteDtoSchema),
+});
+
+export const RefreshCaregiverInviteResponseSchema = z.object({
+  id: z.string().cuid(),
+  email: z.string().email(),
+  expiresAt: z.string().datetime(),
+  inviteUrl: z.string().url(),
+});
 
 export const SupplyDtoSchema = z.object({
   id: z.string().cuid(),

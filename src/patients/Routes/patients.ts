@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import type { ListCareEvents } from "../../care-events/UseCases/ListCareEvents.js";
-import { getSessionUser } from "../../lib/getSessionUser.js";
+import { requireSessionUser } from "../../lib/requireSessionUser.js";
 import { sendDomainRouteError } from "../../lib/sendDomainRouteError.js";
 import type {
   ApplyMedication,
@@ -28,6 +28,7 @@ import {
   CreateSupplyBodySchema,
   ListCareEventsQuerySchema,
   ListCareEventsResponseSchema,
+  ListCaregiverInvitesResponseSchema,
   ListCaregiversResponseSchema,
   ListMedicationsResponseSchema,
   ListPatientsResponseSchema,
@@ -36,8 +37,10 @@ import {
   OkResponseSchema,
   PatientDtoSchema,
   PatientIdParamsSchema,
+  PatientInviteIdParamsSchema,
   PatientMedicationParamsSchema,
   PatientSupplyParamsSchema,
+  RefreshCaregiverInviteResponseSchema,
   RemoveCaregiverParamsSchema,
   SupplyDtoSchema,
   UpdateMedicationBodySchema,
@@ -46,7 +49,9 @@ import {
 } from "../schemas.js";
 import type {
   AddPatientCaregiver,
+  ListPatientCaregiverInvites,
   ListPatientCaregivers,
+  RefreshPatientCaregiverInvite,
   RemovePatientCaregiver,
 } from "../UseCases/Caregivers.js";
 import type {
@@ -75,6 +80,8 @@ export type CareRouteDeps = {
   listPatientCaregivers: ListPatientCaregivers;
   addPatientCaregiver: AddPatientCaregiver;
   removePatientCaregiver: RemovePatientCaregiver;
+  listPatientCaregiverInvites: ListPatientCaregiverInvites;
+  refreshPatientCaregiverInvite: RefreshPatientCaregiverInvite;
   listSupplies: ListSupplies;
   createSupply: CreateSupply;
   updateSupply: UpdateSupply;
@@ -96,6 +103,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
   { care: c },
 ) => {
   const z = app.withTypeProvider<ZodTypeProvider>();
+  z.addHook("preHandler", requireSessionUser);
 
   z.route({
     method: "GET",
@@ -107,13 +115,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: ListPatientsResponseSchema, 401: ErrorSchema, 500: ErrorSchema },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.listPatients.execute(user.id);
         return reply.status(200).send(result);
@@ -134,13 +136,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 201: PatientDtoSchema, 401: ErrorSchema, 500: ErrorSchema },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.createPatient.execute(user.id, request.body);
         return reply.status(201).send(result);
@@ -160,13 +156,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: ListCaregiversResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.listPatientCaregivers.execute(
           user.id,
@@ -190,13 +180,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 201: AddCaregiverResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.addPatientCaregiver.execute(
           user.id,
@@ -220,13 +204,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: OkResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         await c.removePatientCaregiver.execute(
           user.id,
@@ -234,6 +212,53 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
           request.params.userId,
         );
         return reply.status(200).send({ ok: true as const });
+      } catch (error) {
+        return sendDomainRouteError(app.log, reply, error);
+      }
+    },
+  });
+
+  z.route({
+    method: "GET",
+    url: "/:patientId/caregiver-invites",
+    schema: {
+      operationId: "listPatientCaregiverInvites",
+      tags: ["Patients", "Caregivers"],
+      params: PatientIdParamsSchema,
+      response: { 200: ListCaregiverInvitesResponseSchema, ...err },
+    },
+    handler: async (request, reply) => {
+      const user = request.sessionUser!;
+      try {
+        const result = await c.listPatientCaregiverInvites.execute(
+          user.id,
+          request.params.patientId,
+        );
+        return reply.status(200).send(result);
+      } catch (error) {
+        return sendDomainRouteError(app.log, reply, error);
+      }
+    },
+  });
+
+  z.route({
+    method: "POST",
+    url: "/:patientId/caregiver-invites/:inviteId/refresh",
+    schema: {
+      operationId: "refreshPatientCaregiverInvite",
+      tags: ["Patients", "Caregivers"],
+      params: PatientInviteIdParamsSchema,
+      response: { 200: RefreshCaregiverInviteResponseSchema, ...err },
+    },
+    handler: async (request, reply) => {
+      const user = request.sessionUser!;
+      try {
+        const result = await c.refreshPatientCaregiverInvite.execute(
+          user.id,
+          request.params.patientId,
+          request.params.inviteId,
+        );
+        return reply.status(200).send(result);
       } catch (error) {
         return sendDomainRouteError(app.log, reply, error);
       }
@@ -250,13 +275,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: ListSuppliesResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.listSupplies.execute(
           user.id,
@@ -280,13 +299,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 201: SupplyDtoSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.createSupply.execute(
           user.id,
@@ -311,13 +324,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: SupplyDtoSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.updateSupply.execute(
           user.id,
@@ -342,13 +349,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: OkResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         await c.deleteSupply.execute(
           user.id,
@@ -372,13 +373,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: ListMedicationsResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.listMedications.execute(
           user.id,
@@ -402,13 +397,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 201: MedicationDtoSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.createMedication.execute(
           user.id,
@@ -433,13 +422,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: MedicationDtoSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.updateMedication.execute(
           user.id,
@@ -464,13 +447,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: OkResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         await c.deleteMedication.execute(
           user.id,
@@ -495,13 +472,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 201: ApplyMedicationResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.applyMedication.execute(
           user.id,
@@ -527,13 +498,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: ListCareEventsResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.listCareEvents.execute(
           user.id,
@@ -557,13 +522,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: PatientDtoSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.getPatient.execute(
           user.id,
@@ -587,13 +546,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: PatientDtoSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         const result = await c.updatePatient.execute(
           user.id,
@@ -617,13 +570,7 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
       response: { 200: OkResponseSchema, ...err },
     },
     handler: async (request, reply) => {
-      const user = await getSessionUser(request);
-      if (!user) {
-        return reply.status(401).send({
-          message: "Não autorizado",
-          code: "UNAUTHORIZED",
-        });
-      }
+      const user = request.sessionUser!;
       try {
         await c.deletePatient.execute(user.id, request.params.patientId);
         return reply.status(200).send({ ok: true as const });

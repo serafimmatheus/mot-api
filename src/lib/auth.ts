@@ -2,26 +2,20 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { openAPI } from "better-auth/plugins";
 
-import { claimPendingCaregiverInvites } from "../patients/UseCases/claimPendingCaregiverInvites.js";
 import { prisma } from "./db.js";
+
+const trustedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  process.env.BETTER_AUTH_TRUSTED_ORIGIN,
+].filter((o): o is string => Boolean(o));
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:5555",
-  trustedOrigins: ["http://localhost:3000"],
+  trustedOrigins,
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
-  databaseHooks: {
-    user: {
-      create: {
-        after: async (user) => {
-          if (user.email) {
-            await claimPendingCaregiverInvites(prisma, user.id, user.email);
-          }
-        },
-      },
-    },
-  },
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID || "",

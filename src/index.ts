@@ -21,10 +21,17 @@ import {
   ListMedications,
   UpdateMedication,
 } from "./medications/UseCases/MedicationCrud.js";
+import { caregiverInvitePublicRoutes } from "./patients/Routes/caregiver-invite-public.js";
 import { patientRoutes } from "./patients/Routes/patients.js";
 import {
+  AcceptCaregiverInvite,
+  GetCaregiverInvitePreview,
+} from "./patients/UseCases/CaregiverInvitePublic.js";
+import {
   AddPatientCaregiver,
+  ListPatientCaregiverInvites,
   ListPatientCaregivers,
+  RefreshPatientCaregiverInvite,
   RemovePatientCaregiver,
 } from "./patients/UseCases/Caregivers.js";
 import {
@@ -68,11 +75,16 @@ await app.register(fastifySwagger, {
   transform: jsonSchemaTransform,
 });
 
+const devFrontOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  process.env.BETTER_AUTH_TRUSTED_ORIGIN,
+].filter((o): o is string => Boolean(o));
+
 await app.register(fastifyCors, {
   origin: [
     `http://localhost:${process.env.PORT || 5555}`,
-    process.env.BETTER_AUTH_TRUSTED_ORIGIN || "http://localhost:3000",
-    "http://localhost:3000",
+    ...devFrontOrigins,
   ],
   credentials: true,
 });
@@ -104,6 +116,8 @@ const care = {
   listPatientCaregivers: new ListPatientCaregivers(prisma),
   addPatientCaregiver: new AddPatientCaregiver(prisma),
   removePatientCaregiver: new RemovePatientCaregiver(prisma),
+  listPatientCaregiverInvites: new ListPatientCaregiverInvites(prisma),
+  refreshPatientCaregiverInvite: new RefreshPatientCaregiverInvite(prisma),
   listSupplies: new ListSupplies(prisma),
   createSupply: new CreateSupply(prisma),
   updateSupply: new UpdateSupply(prisma),
@@ -117,6 +131,15 @@ const care = {
 };
 
 const consumeSupply = new ConsumeSupply(prisma);
+
+await app.register(
+  async (instance) =>
+    instance.register(caregiverInvitePublicRoutes, {
+      getPreview: new GetCaregiverInvitePreview(prisma),
+      acceptInvite: new AcceptCaregiverInvite(prisma),
+    }),
+  { prefix: "/public/caregiver-invites" },
+);
 
 await app.register(patientRoutes, {
   prefix: "/patients",
@@ -174,7 +197,7 @@ app.route({
 });
 
 try {
-  await app.listen({ port: Number(process.env.PORT) || 3000 });
+  await app.listen({ port: Number(process.env.PORT) || 5555 });
 } catch (err) {
   app.log.error(err);
   process.exit(1);
