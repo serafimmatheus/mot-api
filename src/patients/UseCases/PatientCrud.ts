@@ -1,6 +1,10 @@
 import { ErrorNotFound } from "../../errors/ErrorNotFound.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { assertPatientCaregiverAccess } from "../../lib/assertPatientCaregiverAccess.js";
+import {
+  createActivityLog,
+  formatUserLabel,
+} from "../../lib/createActivityLog.js";
 
 function toPatientDto(p: {
   id: string;
@@ -35,7 +39,7 @@ export class CreatePatient {
   constructor(private readonly prisma: PrismaClient) {}
 
   async execute(userId: string, input: { name: string; notes?: string }) {
-    return this.prisma.$transaction(async (tx) => {
+    const dto = await this.prisma.$transaction(async (tx) => {
       const patient = await tx.patient.create({
         data: {
           name: input.name.trim(),
@@ -47,6 +51,17 @@ export class CreatePatient {
       });
       return toPatientDto(patient);
     });
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    await createActivityLog(this.prisma, {
+      patientId: dto.id,
+      actorUserId: userId,
+      action: "PATIENT_CREATED",
+      summary: `${formatUserLabel(actor)} cadastrou o paciente «${dto.name}».`,
+    });
+    return dto;
   }
 }
 
@@ -84,6 +99,16 @@ export class UpdatePatient {
         }),
       },
     });
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    await createActivityLog(this.prisma, {
+      patientId,
+      actorUserId: userId,
+      action: "PATIENT_UPDATED",
+      summary: `${formatUserLabel(actor)} atualizou os dados do paciente «${patient.name}».`,
+    });
     return toPatientDto(patient);
   }
 }
@@ -93,6 +118,20 @@ export class DeletePatient {
 
   async execute(userId: string, patientId: string) {
     await assertPatientCaregiverAccess(this.prisma, { userId, patientId });
+    const existing = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { name: true },
+    });
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    await createActivityLog(this.prisma, {
+      patientId,
+      actorUserId: userId,
+      action: "PATIENT_DELETED",
+      summary: `${formatUserLabel(actor)} excluiu o paciente «${existing?.name ?? patientId}».`,
+    });
     await this.prisma.patient.delete({ where: { id: patientId } });
   }
 }

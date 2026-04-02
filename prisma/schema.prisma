@@ -23,6 +23,7 @@ model User {
   sessions            Session[]
   patientCaregivers   PatientCaregiver[]
   careEventsPerformed CareEvent[]
+  activityLogs        ActivityLog[]
 
   @@map("user")
 }
@@ -104,8 +105,27 @@ model Patient {
   supplies         Supply[]
   medications      Medication[]
   careEvents       CareEvent[]
+  activityLogs     ActivityLog[]
 
   @@map("patient")
+}
+
+/// Histórico de ações na plataforma (auditoria por paciente).
+model ActivityLog {
+  id          String   @id @default(cuid())
+  patientId   String
+  actorUserId String
+  action      String
+  summary     String
+  metadata    Json?
+  createdAt   DateTime @default(now()) @db.Timestamptz()
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  actor   User    @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([patientId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("activity_log")
 }
 
 /// N:N — um paciente pode ter vários cuidadores; um usuário pode cuidar de vários pacientes.

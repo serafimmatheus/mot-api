@@ -2,6 +2,10 @@ import { ErrorNotFound } from "../../errors/ErrorNotFound.js";
 import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
 import { CareEventType } from "../../generated/prisma/enums.js";
 import { assertPatientCaregiverAccess } from "../../lib/assertPatientCaregiverAccess.js";
+import {
+  createActivityLog,
+  formatUserLabel,
+} from "../../lib/createActivityLog.js";
 
 function toMedicationDto(m: {
   id: string;
@@ -55,6 +59,20 @@ export class CreateMedication {
         }),
       },
     });
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { name: true },
+    });
+    await createActivityLog(this.prisma, {
+      patientId,
+      actorUserId: userId,
+      action: "MEDICATION_CREATED",
+      summary: `${formatUserLabel(actor)} cadastrou o medicamento «${medication.name}» (${medication.dosage}) no paciente «${patient?.name ?? ""}».`,
+    });
     return toMedicationDto(medication);
   }
 }
@@ -90,6 +108,20 @@ export class UpdateMedication {
       where: { id: medicationId },
       data,
     });
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { name: true },
+    });
+    await createActivityLog(this.prisma, {
+      patientId,
+      actorUserId: userId,
+      action: "MEDICATION_UPDATED",
+      summary: `${formatUserLabel(actor)} atualizou o medicamento «${medication.name}» no paciente «${patient?.name ?? ""}».`,
+    });
     return toMedicationDto(medication);
   }
 }
@@ -105,6 +137,20 @@ export class DeleteMedication {
     if (!existing) {
       throw new ErrorNotFound("Medicamento não encontrado para este paciente");
     }
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { name: true },
+    });
+    await createActivityLog(this.prisma, {
+      patientId,
+      actorUserId: userId,
+      action: "MEDICATION_DELETED",
+      summary: `${formatUserLabel(actor)} excluiu o medicamento «${existing.name}» do paciente «${patient?.name ?? ""}».`,
+    });
     await this.prisma.medication.delete({ where: { id: medicationId } });
   }
 }
@@ -134,6 +180,22 @@ export class ApplyMedication {
         medicationId: medication.id,
         performedByUserId: userId,
       },
+    });
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { name: true },
+    });
+    const qty =
+      input.quantity != null ? ` (${input.quantity})` : "";
+    await createActivityLog(this.prisma, {
+      patientId,
+      actorUserId: userId,
+      action: "MEDICATION_APPLIED",
+      summary: `${formatUserLabel(actor)} registrou aplicação do medicamento «${medication.name}»${qty} no paciente «${patient?.name ?? ""}».`,
     });
     return {
       careEventId: event.id,

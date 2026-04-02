@@ -11,6 +11,8 @@ import {
   ZodTypeProvider,
 } from "fastify-type-provider-zod";
 
+import { activityLogRoutes } from "./activity-log/Routes/activity-log.js";
+import { ListActivityLog } from "./activity-log/UseCases/ListActivityLog.js";
 import { ListCareEvents } from "./care-events/UseCases/ListCareEvents.js";
 import { auth } from "./lib/auth.js";
 import { prisma } from "./lib/db.js";
@@ -128,6 +130,15 @@ const care = {
 };
 
 const consumeSupply = new ConsumeSupply(prisma);
+const listActivityLog = new ListActivityLog(prisma);
+
+await app.register(
+  async (instance) =>
+    instance.register(activityLogRoutes, {
+      listActivityLog,
+    }),
+  { prefix: "/activity-log" },
+);
 
 await app.register(
   async (instance) =>

@@ -3,6 +3,10 @@ import { ErrorNotFound } from "../../errors/ErrorNotFound.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { CareEventType } from "../../generated/prisma/enums.js";
 import { assertPatientCaregiverAccess } from "../../lib/assertPatientCaregiverAccess.js";
+import {
+  createActivityLog,
+  formatUserLabel,
+} from "../../lib/createActivityLog.js";
 
 export interface ConsumeSupplyInput {
   userId: string;
@@ -31,6 +35,22 @@ export class ConsumeSupply {
       }
 
       if (supply.currentQuantity < input.quantity) {
+        const [actor, patient] = await Promise.all([
+          tx.user.findUnique({
+            where: { id: input.userId },
+            select: { name: true, email: true },
+          }),
+          tx.patient.findUnique({
+            where: { id: input.patientId },
+            select: { name: true },
+          }),
+        ]);
+        await createActivityLog(tx, {
+          patientId: input.patientId,
+          actorUserId: input.userId,
+          action: "SUPPLY_CONSUME_DENIED",
+          summary: `${formatUserLabel(actor)} tentou registrar consumo de ${input.quantity} ${supply.unit} de «${supply.name}», mas o estoque (${supply.currentQuantity}) é insuficiente (paciente «${patient?.name ?? ""}»).`,
+        });
         throw new ErrorBadRequest(
           "Quantidade insuficiente em estoque para este consumo",
         );
@@ -52,6 +72,21 @@ export class ConsumeSupply {
           supplyId: supply.id,
           performedByUserId: input.userId,
         },
+      });
+
+      const actor = await tx.user.findUnique({
+        where: { id: input.userId },
+        select: { name: true, email: true },
+      });
+      const patient = await tx.patient.findUnique({
+        where: { id: input.patientId },
+        select: { name: true },
+      });
+      await createActivityLog(tx, {
+        patientId: input.patientId,
+        actorUserId: input.userId,
+        action: "SUPPLY_CONSUMED",
+        summary: `${formatUserLabel(actor)} registrou consumo de ${input.quantity} ${updated.unit} de «${updated.name}» no paciente «${patient?.name ?? ""}».`,
       });
 
       const lowStockWarning = updated.currentQuantity <= updated.minQuantity;

@@ -1,6 +1,10 @@
 import { ErrorNotFound } from "../../errors/ErrorNotFound.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { assertPatientCaregiverAccess } from "../../lib/assertPatientCaregiverAccess.js";
+import {
+  createActivityLog,
+  formatUserLabel,
+} from "../../lib/createActivityLog.js";
 
 function toSupplyDto(s: {
   id: string;
@@ -60,6 +64,20 @@ export class CreateSupply {
         unit: input.unit.trim(),
       },
     });
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { name: true },
+    });
+    await createActivityLog(this.prisma, {
+      patientId,
+      actorUserId: userId,
+      action: "SUPPLY_CREATED",
+      summary: `${formatUserLabel(actor)} cadastrou o insumo «${supply.name}» (${supply.currentQuantity} ${supply.unit}) no paciente «${patient?.name ?? ""}».`,
+    });
     return toSupplyDto(supply);
   }
 }
@@ -95,6 +113,20 @@ export class UpdateSupply {
       where: { id: supplyId },
       data,
     });
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { name: true },
+    });
+    await createActivityLog(this.prisma, {
+      patientId,
+      actorUserId: userId,
+      action: "SUPPLY_UPDATED",
+      summary: `${formatUserLabel(actor)} atualizou o insumo «${supply.name}» no paciente «${patient?.name ?? ""}».`,
+    });
     return toSupplyDto(supply);
   }
 }
@@ -110,6 +142,20 @@ export class DeleteSupply {
     if (!existing) {
       throw new ErrorNotFound("Insumo não encontrado para este paciente");
     }
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { name: true },
+    });
+    await createActivityLog(this.prisma, {
+      patientId,
+      actorUserId: userId,
+      action: "SUPPLY_DELETED",
+      summary: `${formatUserLabel(actor)} excluiu o insumo «${existing.name}» do paciente «${patient?.name ?? ""}».`,
+    });
     await this.prisma.supply.delete({ where: { id: supplyId } });
   }
 }

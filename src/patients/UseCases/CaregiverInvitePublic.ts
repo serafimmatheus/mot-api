@@ -5,6 +5,10 @@ import { ErrorConflict } from "../../errors/ErrorConflict.js";
 import { ErrorNotFound } from "../../errors/ErrorNotFound.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { auth } from "../../lib/auth.js";
+import {
+  createActivityLog,
+  formatUserLabel,
+} from "../../lib/createActivityLog.js";
 
 function collectSetCookieHeaders(source: Headers): string[] {
   const extended = source as Headers & { getSetCookie?: () => string[] };
@@ -116,6 +120,24 @@ export class AcceptCaregiverInvite {
         { status: 500, headers: { "content-type": "application/json" } },
       );
     }
+
+    const [newUser, patient] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true, email: true },
+      }),
+      this.prisma.patient.findUnique({
+        where: { id: invite.patientId },
+        select: { name: true },
+      }),
+    ]);
+    await createActivityLog(this.prisma, {
+      patientId: invite.patientId,
+      actorUserId: userId,
+      action: "CAREGIVER_INVITE_ACCEPTED",
+      summary: `${formatUserLabel(newUser)} aceitou o convite de cuidador para o paciente «${patient?.name ?? ""}».`,
+      metadata: { email: invite.email },
+    });
 
     const headers = new Headers();
     headers.set("content-type", "application/json");
