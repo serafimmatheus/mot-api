@@ -53,6 +53,7 @@ import type {
   ListPatientCaregivers,
   RefreshPatientCaregiverInvite,
   RemovePatientCaregiver,
+  RevokePatientCaregiverInvite,
 } from "../UseCases/Caregivers.js";
 import type {
   CreatePatient,
@@ -82,6 +83,7 @@ export type CareRouteDeps = {
   removePatientCaregiver: RemovePatientCaregiver;
   listPatientCaregiverInvites: ListPatientCaregiverInvites;
   refreshPatientCaregiverInvite: RefreshPatientCaregiverInvite;
+  revokePatientCaregiverInvite: RevokePatientCaregiverInvite;
   listSupplies: ListSupplies;
   createSupply: CreateSupply;
   updateSupply: UpdateSupply;
@@ -259,6 +261,30 @@ export const patientRoutes: FastifyPluginAsync<PatientRoutesOptions> = async (
           request.params.inviteId,
         );
         return reply.status(200).send(result);
+      } catch (error) {
+        return sendDomainRouteError(app.log, reply, error);
+      }
+    },
+  });
+
+  z.route({
+    method: "DELETE",
+    url: "/:patientId/caregiver-invites/:inviteId",
+    schema: {
+      operationId: "revokePatientCaregiverInvite",
+      tags: ["Patients", "Caregivers"],
+      params: PatientInviteIdParamsSchema,
+      response: { 200: OkResponseSchema, ...err },
+    },
+    handler: async (request, reply) => {
+      const user = request.sessionUser!;
+      try {
+        await c.revokePatientCaregiverInvite.execute(
+          user.id,
+          request.params.patientId,
+          request.params.inviteId,
+        );
+        return reply.status(200).send({ ok: true as const });
       } catch (error) {
         return sendDomainRouteError(app.log, reply, error);
       }

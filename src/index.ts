@@ -33,6 +33,7 @@ import {
   ListPatientCaregivers,
   RefreshPatientCaregiverInvite,
   RemovePatientCaregiver,
+  RevokePatientCaregiverInvite,
 } from "./patients/UseCases/Caregivers.js";
 import {
   CreatePatient,
@@ -118,6 +119,7 @@ const care = {
   removePatientCaregiver: new RemovePatientCaregiver(prisma),
   listPatientCaregiverInvites: new ListPatientCaregiverInvites(prisma),
   refreshPatientCaregiverInvite: new RefreshPatientCaregiverInvite(prisma),
+  revokePatientCaregiverInvite: new RevokePatientCaregiverInvite(prisma),
   listSupplies: new ListSupplies(prisma),
   createSupply: new CreateSupply(prisma),
   updateSupply: new UpdateSupply(prisma),

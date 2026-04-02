@@ -120,6 +120,23 @@ export class RemovePatientCaregiver {
   }
 }
 
+export class RevokePatientCaregiverInvite {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async execute(userId: string, patientId: string, inviteId: string) {
+    await assertPatientCaregiverAccess(this.prisma, { userId, patientId });
+    const row = await this.prisma.patientCaregiverInvite.findFirst({
+      where: { id: inviteId, patientId },
+    });
+    if (!row) {
+      throw new ErrorNotFound("Convite não encontrado");
+    }
+    await this.prisma.patientCaregiverInvite.delete({
+      where: { id: inviteId },
+    });
+  }
+}
+
 export class ListPatientCaregiverInvites {
   constructor(private readonly prisma: PrismaClient) {}
 
