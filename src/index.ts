@@ -14,6 +14,7 @@ import {
 import { ListCareEvents } from "./care-events/UseCases/ListCareEvents.js";
 import { auth } from "./lib/auth.js";
 import { prisma } from "./lib/db.js";
+import { trustedFrontendOrigins } from "./lib/trustedOrigins.js";
 import {
   ApplyMedication,
   CreateMedication,
@@ -76,16 +77,10 @@ await app.register(fastifySwagger, {
   transform: jsonSchemaTransform,
 });
 
-const devFrontOrigins = [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  process.env.BETTER_AUTH_TRUSTED_ORIGIN,
-].filter((o): o is string => Boolean(o));
-
 await app.register(fastifyCors, {
   origin: [
     `http://localhost:${process.env.PORT || 5555}`,
-    ...devFrontOrigins,
+    ...trustedFrontendOrigins(),
   ],
   credentials: true,
 });
