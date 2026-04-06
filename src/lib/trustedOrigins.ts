@@ -15,6 +15,12 @@ export function trustedFrontendOrigins(): string[] {
     /** Metro (Expo) no mesmo host que a API. */
     "http://localhost:8081",
     "http://127.0.0.1:8081",
+    /**
+     * Expo no celular / emulador: `Origin` é `http://IP_LAN:8081` ou `http://10.x:8081`.
+     * Padrões glob do Better Auth (dev local).
+     */
+    "http://192.168.*.*:8081",
+    "http://10.*.*.*:8081",
     ...(single ? [single] : []),
     ...fromMulti,
   ];
