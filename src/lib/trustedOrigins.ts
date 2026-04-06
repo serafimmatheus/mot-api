@@ -12,6 +12,9 @@ export function trustedFrontendOrigins(): string[] {
   const list = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    /** Metro (Expo) no mesmo host que a API. */
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
     ...(single ? [single] : []),
     ...fromMulti,
   ];

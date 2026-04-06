@@ -79,11 +79,37 @@ await app.register(fastifySwagger, {
   transform: jsonSchemaTransform,
 });
 
+const apiPort = Number(process.env.PORT) || 5555;
+const corsStaticOrigins = new Set([
+  `http://localhost:${apiPort}`,
+  `http://127.0.0.1:${apiPort}`,
+  ...trustedFrontendOrigins(),
+]);
+
 await app.register(fastifyCors, {
-  origin: [
-    `http://localhost:${process.env.PORT || 5555}`,
-    ...trustedFrontendOrigins(),
-  ],
+  origin: (origin, cb) => {
+    if (!origin) {
+      cb(null, true);
+      return;
+    }
+    if (corsStaticOrigins.has(origin)) {
+      cb(null, true);
+      return;
+    }
+    const allowLanDev =
+      process.env.NODE_ENV !== "production" ||
+      process.env.CORS_ALLOW_LAN === "1";
+    if (
+      allowLanDev &&
+      /^http:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(
+        origin,
+      )
+    ) {
+      cb(null, true);
+      return;
+    }
+    cb(null, false);
+  },
   credentials: true,
 });
 
@@ -205,7 +231,9 @@ app.route({
 });
 
 try {
-  await app.listen({ port: Number(process.env.PORT) || 5555 });
+  /** `0.0.0.0` permite acesso pela LAN (Expo no celular com `EXPO_PUBLIC_API_URL=http://IP:5555`). */
+  const host = process.env.HOST?.trim() || "0.0.0.0";
+  await app.listen({ port: apiPort, host });
 } catch (err) {
   app.log.error(err);
   process.exit(1);
