@@ -6,6 +6,7 @@ import {
   createActivityLog,
   formatUserLabel,
 } from "../../lib/createActivityLog.js";
+import { normalizeMedicationSchedule } from "../lib/normalizeMedicationSchedule.js";
 
 function toMedicationDto(m: {
   id: string;
@@ -46,19 +47,50 @@ export class CreateMedication {
   async execute(
     userId: string,
     patientId: string,
-    input: { name: string; dosage: string; schedule?: unknown },
+    input: {
+      name: string;
+      dosage: string;
+      schedule?: Record<string, unknown>;
+      stock?: {
+        currentQuantity: number;
+        minQuantity: number;
+        unit: string;
+      };
+    },
   ) {
     await assertPatientCaregiverAccess(this.prisma, { userId, patientId });
-    const medication = await this.prisma.medication.create({
-      data: {
-        patientId,
-        name: input.name.trim(),
-        dosage: input.dosage.trim(),
-        ...(input.schedule !== undefined && {
-          schedule: input.schedule as Prisma.InputJsonValue,
-        }),
-      },
+    const nameTrim = input.name.trim();
+    const dosageTrim = input.dosage.trim();
+    const scheduleJson: Prisma.InputJsonValue | undefined =
+      input.schedule !== undefined
+        ? (normalizeMedicationSchedule(
+            input.schedule,
+          ) as Prisma.InputJsonValue)
+        : undefined;
+
+    const medication = await this.prisma.$transaction(async (tx) => {
+      const med = await tx.medication.create({
+        data: {
+          patientId,
+          name: nameTrim,
+          dosage: dosageTrim,
+          ...(scheduleJson !== undefined && { schedule: scheduleJson }),
+        },
+      });
+      if (input.stock) {
+        await tx.supply.create({
+          data: {
+            patientId,
+            name: nameTrim,
+            currentQuantity: input.stock.currentQuantity,
+            minQuantity: input.stock.minQuantity,
+            unit: input.stock.unit.trim(),
+          },
+        });
+      }
+      return med;
     });
+
     const actor = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { name: true, email: true },
@@ -73,6 +105,14 @@ export class CreateMedication {
       action: "MEDICATION_CREATED",
       summary: `${formatUserLabel(actor)} cadastrou o medicamento «${medication.name}» (${medication.dosage}) no paciente «${patient?.name ?? ""}».`,
     });
+    if (input.stock) {
+      await createActivityLog(this.prisma, {
+        patientId,
+        actorUserId: userId,
+        action: "SUPPLY_CREATED",
+        summary: `${formatUserLabel(actor)} cadastrou o insumo «${nameTrim}» (${input.stock.currentQuantity} ${input.stock.unit.trim()}) no paciente «${patient?.name ?? ""}».`,
+      });
+    }
     return toMedicationDto(medication);
   }
 }
@@ -102,7 +142,11 @@ export class UpdateMedication {
     if (input.dosage !== undefined) data.dosage = input.dosage.trim();
     if (input.schedule !== undefined) {
       data.schedule =
-        input.schedule === null ? Prisma.DbNull : input.schedule;
+        input.schedule === null
+          ? Prisma.DbNull
+          : (normalizeMedicationSchedule(
+              input.schedule as Record<string, unknown>,
+            ) as Prisma.InputJsonValue);
     }
     const medication = await this.prisma.medication.update({
       where: { id: medicationId },

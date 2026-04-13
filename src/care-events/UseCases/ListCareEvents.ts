@@ -8,11 +8,18 @@ export class ListCareEvents {
   async execute(
     userId: string,
     patientId: string,
-    query: { type?: CareEventType; from?: string; to?: string; limit?: number },
+    query: {
+      type?: CareEventType;
+      medicationId?: string;
+      from?: string;
+      to?: string;
+      limit?: number;
+    },
   ) {
     await assertPatientCaregiverAccess(this.prisma, { userId, patientId });
     const where: Prisma.CareEventWhereInput = { patientId };
     if (query.type) where.type = query.type;
+    if (query.medicationId) where.medicationId = query.medicationId;
     if (query.from || query.to) {
       where.occurredAt = {};
       if (query.from) where.occurredAt.gte = new Date(query.from);

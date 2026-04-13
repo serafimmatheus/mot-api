@@ -146,16 +146,50 @@ export const ListMedicationsResponseSchema = z.object({
   medications: z.array(MedicationDtoSchema),
 });
 
+const medicationTimeHhmm = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:mm em 24h");
+
+export const MedicationScheduleSlotSchema = z.object({
+  time: medicationTimeHhmm,
+  label: z.string().trim().max(40).optional(),
+});
+
+export const MedicationScheduleBodySchema = z
+  .object({
+    times: z.array(medicationTimeHhmm).max(48).optional(),
+    slots: z.array(MedicationScheduleSlotSchema).max(48).optional(),
+    administrationRoute: z.enum(["ORAL", "SUBCUTANEOUS"]).optional(),
+    observations: z.string().max(2000).optional(),
+    form: z.string().max(120).optional(),
+    frequencyLabel: z.string().max(120).optional(),
+    reminderNote: z.string().max(2000).optional(),
+    instructions: z
+      .object({
+        food: z.string().max(2000).optional(),
+        ingestion: z.string().max(2000).optional(),
+      })
+      .optional(),
+  })
+  .passthrough();
+
+export const CreateMedicationStockBodySchema = z.object({
+  currentQuantity: z.coerce.number().int().min(0),
+  minQuantity: z.coerce.number().int().min(0),
+  unit: z.string().trim().min(1).max(32),
+});
+
 export const CreateMedicationBodySchema = z.object({
   name: z.string().trim().min(1),
   dosage: z.string().trim().min(1),
-  schedule: z.record(z.string(), z.unknown()).optional(),
+  schedule: MedicationScheduleBodySchema.optional(),
+  stock: CreateMedicationStockBodySchema.optional(),
 });
 
 export const UpdateMedicationBodySchema = z.object({
   name: z.string().trim().min(1).optional(),
   dosage: z.string().trim().min(1).optional(),
-  schedule: z.record(z.string(), z.unknown()).nullable().optional(),
+  schedule: MedicationScheduleBodySchema.nullable().optional(),
 });
 
 export const ApplyMedicationBodySchema = z.object({
@@ -191,6 +225,7 @@ export const CareEventDtoSchema = z.object({
 
 export const ListCareEventsQuerySchema = z.object({
   type: careEventTypeEnum.optional(),
+  medicationId: z.string().cuid().optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
