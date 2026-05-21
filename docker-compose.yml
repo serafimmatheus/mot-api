@@ -1,14 +1,14 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: cuidar-juntos-postgres
+    container_name: mot-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: cuidar_juntos
+      POSTGRES_DB: mot
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

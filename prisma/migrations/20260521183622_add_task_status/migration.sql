@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "TaskStatus" AS ENUM ('RASCUNHO', 'ENVIADO_STG', 'MR_ABERTA_PROD', 'CONCLUIDA');
+
+-- AlterTable
+ALTER TABLE "task" ADD COLUMN     "status" "TaskStatus" NOT NULL DEFAULT 'RASCUNHO';

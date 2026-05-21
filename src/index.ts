@@ -11,48 +11,20 @@ import {
   ZodTypeProvider,
 } from "fastify-type-provider-zod";
 
-import { activityLogRoutes } from "./activity-log/Routes/activity-log.js";
-import { ListActivityLog } from "./activity-log/UseCases/ListActivityLog.js";
-import { ListCareEvents } from "./care-events/UseCases/ListCareEvents.js";
+import { dayRoutes } from "./days/Routes/days.js";
+import {
+  CreateTask,
+  CreateWorkDay,
+  DeleteTask,
+  DeleteWorkDay,
+  GetWorkDay,
+  ListWorkDays,
+  UpdateTask,
+  UpdateWorkDay,
+} from "./days/UseCases/WorkDayCrud.js";
 import { auth } from "./lib/auth.js";
 import { prisma } from "./lib/db.js";
 import { trustedFrontendOrigins } from "./lib/trustedOrigins.js";
-import {
-  ApplyMedication,
-  CreateMedication,
-  DeleteMedication,
-  ListMedications,
-  UpdateMedication,
-} from "./medications/UseCases/MedicationCrud.js";
-import { caregiverInvitePublicRoutes } from "./patients/Routes/caregiver-invite-public.js";
-import { patientRoutes } from "./patients/Routes/patients.js";
-import {
-  AcceptCaregiverInvite,
-  GetCaregiverInvitePreview,
-} from "./patients/UseCases/CaregiverInvitePublic.js";
-import {
-  AddPatientCaregiver,
-  ListPatientCaregiverInvites,
-  ListPatientCaregivers,
-  RefreshPatientCaregiverInvite,
-  RemovePatientCaregiver,
-  RevokePatientCaregiverInvite,
-} from "./patients/UseCases/Caregivers.js";
-import {
-  CreatePatient,
-  DeletePatient,
-  GetPatient,
-  ListPatients,
-  UpdatePatient,
-} from "./patients/UseCases/PatientCrud.js";
-import { suppliesRoutes } from "./supplies/Routes/supplies.js";
-import { ConsumeSupply } from "./supplies/UseCases/ConsumeSupply.js";
-import {
-  CreateSupply,
-  DeleteSupply,
-  ListSupplies,
-  UpdateSupply,
-} from "./supplies/UseCases/SupplyCrud.js";
 
 const app = Fastify({
   logger: true,
@@ -64,9 +36,9 @@ app.setSerializerCompiler(serializerCompiler);
 await app.register(fastifySwagger, {
   openapi: {
     info: {
-      title: "Cuidar Juntos API",
+      title: "Meu Organizador de Tasks API",
       description:
-        "API de gestão de cuidados familiares (pacientes, insumos, medicamentos).",
+        "API para organizar tarefas por dia de trabalho, com branches associadas.",
       version: "1.0.0",
     },
     servers: [
@@ -111,6 +83,7 @@ await app.register(fastifyCors, {
     cb(null, false);
   },
   credentials: true,
+  methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 });
 
 await app.register(fastifyApiReference, {
@@ -118,8 +91,8 @@ await app.register(fastifyApiReference, {
   configuration: {
     sources: [
       {
-        title: "Cuidar Juntos API",
-        slug: "cuidar-juntos-api",
+        title: "MOT API",
+        slug: "mot-api",
         url: "/swagger.json",
       },
       {
@@ -131,58 +104,20 @@ await app.register(fastifyApiReference, {
   },
 });
 
-const care = {
-  listPatients: new ListPatients(prisma),
-  createPatient: new CreatePatient(prisma),
-  getPatient: new GetPatient(prisma),
-  updatePatient: new UpdatePatient(prisma),
-  deletePatient: new DeletePatient(prisma),
-  listPatientCaregivers: new ListPatientCaregivers(prisma),
-  addPatientCaregiver: new AddPatientCaregiver(prisma),
-  removePatientCaregiver: new RemovePatientCaregiver(prisma),
-  listPatientCaregiverInvites: new ListPatientCaregiverInvites(prisma),
-  refreshPatientCaregiverInvite: new RefreshPatientCaregiverInvite(prisma),
-  revokePatientCaregiverInvite: new RevokePatientCaregiverInvite(prisma),
-  listSupplies: new ListSupplies(prisma),
-  createSupply: new CreateSupply(prisma),
-  updateSupply: new UpdateSupply(prisma),
-  deleteSupply: new DeleteSupply(prisma),
-  listMedications: new ListMedications(prisma),
-  createMedication: new CreateMedication(prisma),
-  updateMedication: new UpdateMedication(prisma),
-  deleteMedication: new DeleteMedication(prisma),
-  applyMedication: new ApplyMedication(prisma),
-  listCareEvents: new ListCareEvents(prisma),
+const dayDeps = {
+  listWorkDays: new ListWorkDays(prisma),
+  createWorkDay: new CreateWorkDay(prisma),
+  getWorkDay: new GetWorkDay(prisma),
+  updateWorkDay: new UpdateWorkDay(prisma),
+  deleteWorkDay: new DeleteWorkDay(prisma),
+  createTask: new CreateTask(prisma),
+  updateTask: new UpdateTask(prisma),
+  deleteTask: new DeleteTask(prisma),
 };
 
-const consumeSupply = new ConsumeSupply(prisma);
-const listActivityLog = new ListActivityLog(prisma);
-
-await app.register(
-  async (instance) =>
-    instance.register(activityLogRoutes, {
-      listActivityLog,
-    }),
-  { prefix: "/activity-log" },
-);
-
-await app.register(
-  async (instance) =>
-    instance.register(caregiverInvitePublicRoutes, {
-      getPreview: new GetCaregiverInvitePreview(prisma),
-      acceptInvite: new AcceptCaregiverInvite(prisma),
-    }),
-  { prefix: "/public/caregiver-invites" },
-);
-
-await app.register(patientRoutes, {
-  prefix: "/patients",
-  care,
-});
-
-await app.register(suppliesRoutes, {
-  prefix: "/supplies",
-  consumeSupply,
+await app.register(dayRoutes, {
+  prefix: "/days",
+  ...dayDeps,
 });
 
 app.withTypeProvider<ZodTypeProvider>().route({
@@ -231,7 +166,6 @@ app.route({
 });
 
 try {
-  /** `0.0.0.0` permite acesso pela LAN (Expo no celular com `EXPO_PUBLIC_API_URL=http://IP:5555`). */
   const host = process.env.HOST?.trim() || "0.0.0.0";
   await app.listen({ port: apiPort, host });
 } catch (err) {
