@@ -1,7 +1,7 @@
 import z from "zod";
 
 export const TaskStatusSchema = z.enum([
-  "RASCUNHO",
+  "EM_DESENVOLVIMENTO",
   "ENVIADO_STG",
   "MR_ABERTA_PROD",
   "CONCLUIDA",

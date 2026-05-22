@@ -100,7 +100,7 @@ model WorkDay {
 }
 
 enum TaskStatus {
-  RASCUNHO
+  EM_DESENVOLVIMENTO
   ENVIADO_STG
   MR_ABERTA_PROD
   CONCLUIDA
@@ -112,7 +112,7 @@ model Task {
   workDayId   String
   title       String
   description String?
-  status      TaskStatus @default(RASCUNHO)
+  status      TaskStatus @default(EM_DESENVOLVIMENTO)
   sortOrder   Int        @default(0)
   createdAt   DateTime   @default(now()) @db.Timestamptz()
   updatedAt   DateTime   @updatedAt @db.Timestamptz()
